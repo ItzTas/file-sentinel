@@ -1,17 +1,27 @@
-use notify::RecommendedWatcher;
-pub use notify::{RecursiveMode, Watcher};
-use std::{path::Path, sync::mpsc};
+use notify::{Error, ErrorKind, Event, RecommendedWatcher};
+pub use notify::{RecursiveMode, Result, Watcher};
+use std::{fs::canonicalize, path::Path, sync::mpsc};
 
-fn watch_dir(dir_str: &str) -> Result<(), notify::Error> {
-    let (tx, rx) = mpsc::channel();
+pub fn watch_dir<F>(dir_str: &str, on_dir_change: F) -> Result<()>
+where
+    F: Fn(Event) -> (),
+{
+    let (tx, rx) = mpsc::channel::<Result<Event>>();
 
     let mut watcher: RecommendedWatcher = notify::recommended_watcher(tx)?;
 
-    watcher.watch(Path::new(dir_str), RecursiveMode::Recursive)?;
+    let path = Path::new(dir_str);
+
+    let absolute_path = canonicalize(path)?;
+    if !path.exists() {
+        return Err(Error::new(ErrorKind::PathNotFound));
+    }
+
+    watcher.watch(&absolute_path, RecursiveMode::Recursive)?;
     for res in rx {
         match res {
-            Ok(event) => println!("event: {:?}", event),
-            Err(e) => println!("watch error: {:?}", e),
+            Ok(event) => on_dir_change(event),
+            Err(e) => return Err(e),
         }
     }
 

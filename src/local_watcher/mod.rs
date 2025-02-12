@@ -1,2 +1,2 @@
-mod local_watcher;
+pub mod local_watcher;
 
